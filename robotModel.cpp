@@ -22,7 +22,7 @@ double	hand_h = c_h-0.1;
 // 脚步抬高
 double fh = 0.05;
 // 帧间隔时间
-double frame_T = 0.05;
+double frame_T = 0.02;
 double T_cell = step_basic_frame * frame_T;
 // 转弯角
 double theta = 0;
@@ -30,6 +30,8 @@ double theta = 0;
 double pn[3] = { 0,-sy / 2,0 };
 // 初始摆动位置
 double pn_hand[3] = { 0, hy / 2.0 };
+// 当前的支撑点
+double support_ZMP[3] = { 0,-sy / 2,0 };
 // 质心牵引向量PC_MAIN_BODY
 double PC_MAIN_BODY[3] = { 0 };
 // 质心世界坐标
@@ -52,7 +54,35 @@ double basic_left_foot_angle[step_basic_frame][3] =
 double basic_right_foot_angle[step_basic_frame][3] =
 { 0 };
 
-
+// 设计ZMP预观控制器控制器所需要的参数，结果由matlab使用里卡提方程求解计算
+double Q = 1;
+double R = 1e-6;
+double zc = c_h;
+double dt = frame_T;
+double gravity = 9.8;
+double state_space_A[3][3] = { {1, dt, dt * dt / 2},
+								{0, 1, dt},
+								{0, 0,  1}};
+double state_space_B[3] = { powf(dt,3) / 6, dt * dt / 2,dt };
+double state_space_C[3] = { 1,0,-zc / gravity };
+double state_space_Com[2][3] = {0};
+double sum_e[2] = { 0 };
+const int N_preview = 2 * step_basic_frame;
+// 计算结果
+double ks = 509.270683139212;
+double kx[3] = { 9901.19795970318	,2023.99459263373,	56.6120346271035 };
+double zmp_weight_f[2 * step_basic_frame] = {
+	- 667.714646977504, - 786.196342686028, - 817.907469422699, - 781.373266261508, - 709.573090048174,
+	- 628.350099533318, - 551.900303351159, - 485.399832740281, - 429.038650260766, - 381.101682308915,
+	- 339.661194810992, - 303.223257369275, - 270.805393500508, - 241.799723354576, - 215.812183616704,
+	- 192.548493248281, - 171.753755856202, - 153.189375234005, - 136.629074276295, - 121.861533914600,
+	- 108.693379646419, - 96.9504456233559, - 86.4773283501663, - 77.1359073254730, - 68.8034821621016,
+	- 61.3709325913295, - 54.7410800813827, - 48.8272873423575, - 43.5522676666375, - 38.8470602170006,
+	- 34.6501333742970, - 30.9065897292540, - 27.5674559555676, - 24.5890468486326, - 21.9323958939230,
+	- 19.5627460505250, - 17.4490949758736, - 15.5637892411450, - 13.8821624281784, - 12.3822124068436,
+	- 11.0443135396040, - 9.85096000768734, - 8.78653687233856, - 7.83711586203139, - 6.99027321022830,
+	- 6.23492716192785, - 5.56119302619990, - 4.96025388131022, - 4.42424524308183, - 3.94615218909936,
+};
 
 void robotModelInit(robotLink* robotModel)
 {
@@ -688,6 +718,8 @@ void robotStart()
 	PC_MAIN_BODY[0] = Com[0] - robotModel[MAIN_BODY].p[0];
 	PC_MAIN_BODY[1] = Com[1] - robotModel[MAIN_BODY].p[1];
 	PC_MAIN_BODY[2] = Com[2] - robotModel[MAIN_BODY].p[2];
+	state_space_Com[0][0] = Com[0];
+	state_space_Com[1][0] = Com[1];
 }
 
 void MatrixSquare3x3(double a[3][3], double a_square[3][3]) {
@@ -1247,6 +1279,19 @@ void Calc_com(double com[3]) {
 	com[0] = mc[0] / M;
 	com[1] = mc[1] / M;
 	com[2] = mc[2] / M;
+}
+
+void changeFoot()
+{
+	if (isLeft) {
+		isLeft = false;
+	}
+	else
+	{
+		isLeft = true;
+	}
+	support_ZMP[0] = pn[0];
+	support_ZMP[1] = pn[1];
 }
 
 void angleLimit()
@@ -1898,8 +1943,8 @@ void waistPosition(double x1, double y1,
 
 }
 
-void waistPosition_com(double r,double p,double y) {   // 利用全身质心的位置来牵引腰部的位置
-	Calc_com(Com);
+void waistPosition_com(double r,double p,double y, int current_frame_count) {   // 利用全身质心的位置来牵引腰部的位置
+	CalcTrajectory_Com(current_frame_count);
 	double R[3][3];
 	rpy2rot(r, p, y, R);
 	double v[3] = {0};
@@ -2032,7 +2077,7 @@ void trajPlan() {
 			x3 = robotModel[RIGHT_HAND].p[0]; y3 = robotModel[RIGHT_HAND].p[1];
 			x4 = robotModel[LEFT_HAND].p[0]; y4 = robotModel[LEFT_HAND].p[1];
 			//waistPosition(x1, y1, x2, y2, x3, y3, x4, y4);
-			waistPosition_com(0,0,theta);
+			waistPosition_com(0,0,theta,i);
 
 
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[0] = basic_left_foot[i][0] - temp[0];
@@ -2163,7 +2208,7 @@ void trajPlan() {
 			x3 = robotModel[RIGHT_HAND].p[0]; y3 = robotModel[RIGHT_HAND].p[1];
 			x4 = robotModel[LEFT_HAND].p[0]; y4 = robotModel[LEFT_HAND].p[1];
 			//waistPosition(x1, y1, x2, y2, x3, y3, x4, y4);
-			waistPosition_com(0,0,theta);
+			waistPosition_com(0,0,theta,i);
 
 
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[0] = basic_right_foot[i][0] - temp[0];
@@ -2189,13 +2234,7 @@ void trajPlan() {
 #endif
 		}
 	}
-	if (isLeft) {
-		isLeft = false;
-	}
-	else
-	{
-		isLeft = true;
-	}
+	changeFoot();
 
 
 }
@@ -2313,7 +2352,7 @@ void anglePlan(double delta) {
 			x3 = robotModel[RIGHT_HAND].p[0]; y3 = robotModel[RIGHT_HAND].p[1];
 			x4 = robotModel[LEFT_HAND].p[0]; y4 = robotModel[LEFT_HAND].p[1];
 			//waistPosition(x1, y1, x2, y2, x3, y3, x4, y4);
-			waistPosition_com(0, 0, theta + theta_frame/2);
+			waistPosition_com(0, 0, theta + theta_frame/2,i);
 
 
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[0] = basic_left_foot[i][0] - temp[0];
@@ -2445,7 +2484,7 @@ void anglePlan(double delta) {
 			x3 = robotModel[RIGHT_HAND].p[0]; y3 = robotModel[RIGHT_HAND].p[1];
 			x4 = robotModel[LEFT_HAND].p[0]; y4 = robotModel[LEFT_HAND].p[1];
 			//waistPosition(x1, y1, x2, y2, x3, y3, x4, y4);
-			waistPosition_com(0, 0, theta + theta_frame / 2);
+			waistPosition_com(0, 0, theta + theta_frame / 2,i);
 
 
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[0] = basic_right_foot[i][0] - temp[0];
@@ -2471,13 +2510,7 @@ void anglePlan(double delta) {
 #endif
 		}
 	}
-	if (isLeft) {
-		isLeft = false;
-	}
-	else
-	{
-		isLeft = true;
-	}
+	changeFoot();
 
 	// 拐弯第二步
 
@@ -2593,7 +2626,7 @@ void anglePlan(double delta) {
 			x3 = robotModel[RIGHT_HAND].p[0]; y3 = robotModel[RIGHT_HAND].p[1];
 			x4 = robotModel[LEFT_HAND].p[0]; y4 = robotModel[LEFT_HAND].p[1];
 			//waistPosition(x1, y1, x2, y2, x3, y3, x4, y4);
-			waistPosition_com(0, 0, theta + delta / 2+theta_frame / 2);
+			waistPosition_com(0, 0, theta + delta / 2+theta_frame / 2,i);
 
 
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[0] = basic_left_foot[i][0] - temp[0];
@@ -2726,7 +2759,7 @@ void anglePlan(double delta) {
 			x3 = robotModel[RIGHT_HAND].p[0]; y3 = robotModel[RIGHT_HAND].p[1];
 			x4 = robotModel[LEFT_HAND].p[0]; y4 = robotModel[LEFT_HAND].p[1];
 			//waistPosition(x1, y1, x2, y2, x3, y3, x4, y4);
-			waistPosition_com(0, 0, theta + delta / 2 + theta_frame / 2);
+			waistPosition_com(0, 0, theta + delta / 2 + theta_frame / 2,i);
 
 
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[0] = basic_right_foot[i][0] - temp[0];
@@ -2752,14 +2785,61 @@ void anglePlan(double delta) {
 #endif
 		}
 	}
-	if (isLeft) {
-		isLeft = false;
+	changeFoot();
+	theta = theta + delta;
+}
+
+void CalcTrajectory_Com(int current_frame_count) {
+	double zmp_preview[2][N_preview];
+	bool temp_isLeft = isLeft;
+	double temp_pn[2] = { 0 };
+	if (temp_isLeft) {
+		temp_isLeft = false;
 	}
 	else
 	{
-		isLeft = true;
+		temp_isLeft = true;
 	}
-	theta = theta + delta;
+	temp_pn[0] = pn[0] + cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, temp_isLeft));
+	temp_pn[1] = pn[1] + sin(theta) * sx + (cos(theta) * sy * (-1) * pow(-1, temp_isLeft));
+	
+	for (int i = 0; i < N_preview; i++)
+	{
+		if (step_basic_frame - current_frame_count >= i) {
+			zmp_preview[0][i] = support_ZMP[0];
+			zmp_preview[1][i] = support_ZMP[1];
+		}
+		else if (i - (step_basic_frame - current_frame_count) <= step_basic_frame) {
+			zmp_preview[0][i] = pn[0];
+			zmp_preview[1][i] = pn[1];
+		}
+		else
+		{
+			zmp_preview[0][i] = temp_pn[0];
+			zmp_preview[1][i] = temp_pn[1];
+		}
+	}
+	
+	double zmp_x = state_space_C[0] * state_space_Com[0][0] + state_space_C[1] * state_space_Com[0][1] + state_space_C[2] * state_space_Com[0][2];
+	double zmp_y = state_space_C[0] * state_space_Com[1][0] + state_space_C[1] * state_space_Com[1][1] + state_space_C[2] * state_space_Com[1][2];
+	sum_e[0] = sum_e[0] + zmp_x - support_ZMP[0];
+	sum_e[1] = sum_e[1] + zmp_y - support_ZMP[1];
+	double FMultiZmpPre[2] = { 0 };
+	for (int i = 0; i < N_preview; i++)
+	{
+		FMultiZmpPre[0] = FMultiZmpPre[0] + zmp_weight_f[i] * zmp_preview[0][i];
+		FMultiZmpPre[1] = FMultiZmpPre[1] + zmp_weight_f[i] * zmp_preview[1][i];
+	}
+	double u_x = -ks * sum_e[0] - (kx[0] * state_space_Com[0][0] + kx[1] * state_space_Com[0][1] + kx[2] * state_space_Com[0][2])- FMultiZmpPre[0];
+	double u_y = -ks * sum_e[1] - (kx[0] * state_space_Com[1][0] + kx[1] * state_space_Com[1][1] + kx[2] * state_space_Com[1][2])- FMultiZmpPre[1];
+	state_space_Com[0][0] = state_space_A[0][0] * state_space_Com[0][0] + state_space_A[0][1] * state_space_Com[0][1] + state_space_A[0][2] * state_space_Com[0][2] + state_space_B[0] * u_x;
+	state_space_Com[0][1] = state_space_A[1][0] * state_space_Com[0][0] + state_space_A[1][1] * state_space_Com[0][1] + state_space_A[1][2] * state_space_Com[0][2] + state_space_B[1] * u_x;
+	state_space_Com[0][2] = state_space_A[2][0] * state_space_Com[0][0] + state_space_A[2][1] * state_space_Com[0][1] + state_space_A[2][2] * state_space_Com[0][2] + state_space_B[2] * u_x;
+	state_space_Com[1][0] = state_space_A[0][0] * state_space_Com[1][0] + state_space_A[0][1] * state_space_Com[1][1] + state_space_A[0][2] * state_space_Com[1][2] + state_space_B[0] * u_y;
+	state_space_Com[1][1] = state_space_A[1][0] * state_space_Com[1][0] + state_space_A[1][1] * state_space_Com[1][1] + state_space_A[1][2] * state_space_Com[1][2] + state_space_B[1] * u_y;
+	state_space_Com[1][2] = state_space_A[2][0] * state_space_Com[1][0] + state_space_A[2][1] * state_space_Com[1][1] + state_space_A[2][2] * state_space_Com[1][2] + state_space_B[2] * u_y;
+	Com[0] = state_space_Com[0][0];
+	Com[1] = state_space_Com[1][0];
 }
 
 /*/void test()

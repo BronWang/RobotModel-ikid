@@ -108,8 +108,9 @@ void R_T3x3(double R[3][3], double R_T[3][3]);
 void CalcL(unsigned int linkID, double L[3]);
 void Calc_mc(unsigned int linkID, double mc[3]); // 已测试
 void Calc_com(double com[3]);// 已测试
+void changeFoot();
 void angleLimit();
-void waistPosition_com(double r, double p, double y);
+void waistPosition_com(double r, double p, double y, int current_frame_count);
 void inverseKinmatics_head(); //已测试
 void inverseKinmatics_leftHand(); //已测试，这里结合了解析法和数值法迭代，可以调整迭代次数提高精度
 void inverseKinmatics_rightHand();//已测试，这里结合了解析法和数值法迭代，可以调整迭代次数提高精度
@@ -119,6 +120,7 @@ void clearTxt(); // 只是方便自己输出数据在matlab可视化用
 void writeTxt(); // 只是方便自己输出数据在matlab可视化用
 void trajPlan(); // 已测试
 void anglePlan(double delta); // 已测试
+void CalcTrajectory_Com(int current_frame_count);
 //void test();
 //void test2();
 //void test3();
