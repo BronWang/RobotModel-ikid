@@ -692,6 +692,7 @@ void robotStart()
 	robotModel[MAIN_BODY].p[0] = 0;
 	robotModel[MAIN_BODY].p[1] = 0;
 	robotModel[MAIN_BODY].p[2] = 0.3;
+	forwardKinematics(MAIN_BODY);
 	double R[3][3];
 	double temp[3];
 	rpy2rot(0, 0, 0, R);
