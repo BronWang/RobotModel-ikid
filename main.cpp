@@ -13,9 +13,12 @@ int main(void) {
 	Calc_com(com);
 	printf("ÖØÐÄ £º%f %f %f", com[0], com[1], com[2]);
 	trajPlan();
-	anglePlan(PI / 18);
+	anglePlan(PI / 6);
 	trajPlan();
-	anglePlan(PI / 18);
+	anglePlan(PI / 6);
+	trajPlan();
+	trajPlan();
+	trajPlan();
 	trajPlan();
 	trajPlan();
 }

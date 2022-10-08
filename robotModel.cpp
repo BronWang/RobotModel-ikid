@@ -2022,7 +2022,7 @@ void trajPlan() {
 		arm_abc[1] = robotModel[RIGHT_ARM_FRONT_SWING].p[1] - robotModel[RIGHT_HAND].p[1];
 		arm_abc[2] = robotModel[RIGHT_ARM_FRONT_SWING].p[2] - robotModel[RIGHT_HAND].p[2];
 		arm_length = norm(arm_abc, 1, 3);
-		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft)))/2) / arm_length);
+		arm_swing_angle = asin(sx/2 / arm_length);
 
 #endif
 
@@ -2122,7 +2122,7 @@ void trajPlan() {
 		arm_abc[1] = robotModel[LEFT_ARM_FRONT_SWING].p[1] - robotModel[LEFT_HAND].p[1];
 		arm_abc[2] = robotModel[LEFT_ARM_FRONT_SWING].p[2] - robotModel[LEFT_HAND].p[2];
 		arm_length = norm(arm_abc, 1, 3);
-		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+		arm_swing_angle = asin(sx/2 / arm_length);
 #endif
 
 		for (int i = 0; i < step_basic_frame; i++)
@@ -2191,10 +2191,7 @@ void trajPlan() {
 void anglePlan(double delta) {
 	pn[0] = pn[0] + cos(theta + delta) * sx + (-sin(theta + delta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta + delta) * sx + (cos(theta + delta) * sy * (-1) * pow(-1, isLeft));
-#if SWING_ARM
-	pn_hand[0] = pn_hand[0] + cos(theta + delta) * hx + (-sin(theta + delta) * hy * pow(-1, isLeft));
-	pn_hand[1] = pn_hand[1] + sin(theta + delta) * hx + (cos(theta + delta) * hy * pow(-1, isLeft));
-#endif
+
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2237,7 +2234,7 @@ void anglePlan(double delta) {
 		arm_abc[1] = robotModel[RIGHT_ARM_FRONT_SWING].p[1] - robotModel[RIGHT_HAND].p[1];
 		arm_abc[2] = robotModel[RIGHT_ARM_FRONT_SWING].p[2] - robotModel[RIGHT_HAND].p[2];
 		arm_length = norm(arm_abc, 1, 3);
-		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+		arm_swing_angle = asin(sx/2 / arm_length);
 
 #endif
 
@@ -2342,7 +2339,7 @@ void anglePlan(double delta) {
 		arm_abc[1] = robotModel[LEFT_ARM_FRONT_SWING].p[1] - robotModel[LEFT_HAND].p[1];
 		arm_abc[2] = robotModel[LEFT_ARM_FRONT_SWING].p[2] - robotModel[LEFT_HAND].p[2];
 		arm_length = norm(arm_abc, 1, 3);
-		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+		arm_swing_angle = asin(sx/2 / arm_length);
 #endif
 
 		for (int i = 0; i < step_basic_frame; i++)
@@ -2409,10 +2406,7 @@ void anglePlan(double delta) {
 
 	pn[0] = pn[0] + cos(theta + delta) * sx + (-sin(theta + delta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta + delta) * sx + (cos(theta + delta) * sy * (-1) * pow(-1, isLeft));
-#if SWING_ARM
-	pn_hand[0] = pn_hand[0] + cos(theta + delta) * hx + (-sin(theta + delta) * hy * pow(-1, isLeft));
-	pn_hand[1] = pn_hand[1] + sin(theta + delta) * hx + (cos(theta + delta) * hy * pow(-1, isLeft));
-#endif
+
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2455,7 +2449,7 @@ void anglePlan(double delta) {
 		arm_abc[1] = robotModel[RIGHT_ARM_FRONT_SWING].p[1] - robotModel[RIGHT_HAND].p[1];
 		arm_abc[2] = robotModel[RIGHT_ARM_FRONT_SWING].p[2] - robotModel[RIGHT_HAND].p[2];
 		arm_length = norm(arm_abc, 1, 3);
-		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+		arm_swing_angle = asin(sx/2 / arm_length);
 
 #endif
 
@@ -2560,7 +2554,7 @@ void anglePlan(double delta) {
 		arm_abc[1] = robotModel[LEFT_ARM_FRONT_SWING].p[1] - robotModel[LEFT_HAND].p[1];
 		arm_abc[2] = robotModel[LEFT_ARM_FRONT_SWING].p[2] - robotModel[LEFT_HAND].p[2];
 		arm_length = norm(arm_abc, 1, 3);
-		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+		arm_swing_angle = asin(sx/2 / arm_length);
 #endif
 
 		for (int i = 0; i < step_basic_frame; i++)
