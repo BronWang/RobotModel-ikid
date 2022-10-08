@@ -15,4 +15,7 @@ int main(void) {
 	trajPlan();
 	anglePlan(PI / 18);
 	trajPlan();
+	anglePlan(PI / 18);
+	trajPlan();
+	trajPlan();
 }

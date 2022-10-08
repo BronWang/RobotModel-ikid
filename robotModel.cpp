@@ -30,12 +30,19 @@ double theta = 0;
 double pn[3] = { 0,-sy / 2,0 };
 // 初始摆动位置
 double pn_hand[3] = { 0, hy / 2.0 };
+// 左右臂初始摆动角度
+double arm_swing_angle = 0;
+double left_arm_swing_angle = 0;
+double right_arm_swing_angle = 0;
 // 当前的支撑点
 double support_ZMP[3] = { 0,-sy / 2,0 };
 // 质心牵引向量PC_MAIN_BODY
 double PC_MAIN_BODY[3] = { 0 };
 // 质心世界坐标
 double Com[3] = { 0 };
+// 实际全身质心与ZMP生成的质心位置误差
+double error_Com_ZmpCom[3] = { 0 };
+double sum_error_Com_ZmpCom = 0;
 
 bool isLeft = true;
 
@@ -706,14 +713,8 @@ void robotStart()
 	robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = -sy / 2 - temp[1];
 	robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = 0 - temp[2];
 	inverseKinmatics_rightFoot(0, 0, 0);
-	robotModel[RIGHT_HAND].p[0] = 0;
-	robotModel[RIGHT_HAND].p[1] = -hy / 2;
-	robotModel[RIGHT_HAND].p[2] = hand_h;
-	inverseKinmatics_rightHand();
-	robotModel[LEFT_HAND].p[0] = 0;
-	robotModel[LEFT_HAND].p[1] = hy / 2;
-	robotModel[LEFT_HAND].p[2] = hand_h;
-	inverseKinmatics_leftHand();
+
+
 	forwardKinematics(MAIN_BODY);
 	Calc_com(Com);
 	PC_MAIN_BODY[0] = Com[0] - robotModel[MAIN_BODY].p[0];
@@ -1924,7 +1925,16 @@ void writeTxt() {
 		fputs(ch, fp);
 	}
 	fclose(fp);
-
+	/*double temp_com[3] = { 0 };
+	Calc_com(temp_com);
+	error_Com_ZmpCom[0] = fabs(temp_com[0] - Com[0]);
+	error_Com_ZmpCom[1] = fabs(temp_com[1] - Com[1]);
+	error_Com_ZmpCom[2] = fabs(temp_com[2] - Com[2]);
+	sum_error_Com_ZmpCom += error_Com_ZmpCom[0] + error_Com_ZmpCom[1]+ error_Com_ZmpCom[2];
+	printf("error_Com_ZmpCom x: %f\n", error_Com_ZmpCom[0]);
+	printf("error_Com_ZmpCom y: %f\n", error_Com_ZmpCom[1]);
+	printf("error_Com_ZmpCom z: %f\n", error_Com_ZmpCom[2]);
+	printf("sum error_Com_ZmpCom : %f\n", sum_error_Com_ZmpCom);*/
 	return;
 }
 
@@ -1969,8 +1979,6 @@ void trajPlan() {
 	// 第n步
 	pn[0] = pn[0] + cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta) * sx + (cos(theta) * sy * (-1) * pow(-1, isLeft));
-	pn_hand[0] = pn_hand[0] + cos(theta) * hx + (-sin(theta) * hy * pow(-1, isLeft));
-	pn_hand[1] = pn_hand[1] + sin(theta) * hx + (cos(theta) * hy * pow(-1, isLeft));
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2004,32 +2012,19 @@ void trajPlan() {
 		double T_T[3][3];
 		invMatrix3x3(T, T_T);
 
-		// 右手
-		double P_hand[3] = { robotModel[RIGHT_HAND].p[0], robotModel[RIGHT_HAND].p[1], hand_h };
-		double Q_hand[3] = { (robotModel[RIGHT_HAND].p[0] + pn_hand[0]) / 2, (robotModel[RIGHT_HAND].p[1] + pn_hand[1]) / 2, hand_h+0.02 };
-		double R_hand[3] = { pn_hand[0], pn_hand[1], hand_h };
-		double PQ_hand[3] = { Q_hand[0] - P_hand[0], Q_hand[1] - P_hand[1], Q_hand[2] - P_hand[2] };
-		double QR_hand[3] = { R_hand[0] - Q_hand[0], R_hand[1] - Q_hand[1], R_hand[2] - Q_hand[2] };
-		double n1_hand[3];
-		cross3x1(PQ_hand, QR_hand, n1_hand);
-		// 三点平面原点C
-		double C_hand[3] = { Q_hand[0], Q_hand[1], hand_h };
-		// x轴单位向量i_prime
-		double CP_norm_hand = sqrt((C_hand[0] - P_hand[0]) * (C_hand[0] - P_hand[0]) + (C_hand[1] - P_hand[1]) * (C_hand[1] - P_hand[1]) + (C_hand[2] - P_hand[2]) * (C_hand[2] - P_hand[2]));
-		double i_prime_hand[3] = { (P_hand[0] - C_hand[0]) / CP_norm_hand, (P_hand[1] - C_hand[1]) / CP_norm_hand, (P_hand[2] - C_hand[2]) / CP_norm_hand };
-		// z轴单位向量k_prime
-		double n1_morm_hand = sqrt(n1_hand[0] * n1_hand[0] + n1_hand[1] * n1_hand[1] + n1_hand[2] * n1_hand[2]);
-		double k_prime_hand[3] = { n1_hand[0] / n1_morm_hand, n1_hand[1] / n1_morm_hand, n1_hand[2] / n1_morm_hand };
-		// y轴单位向量j_prime
-		double j_prime_hand[3];
-		cross3x1(k_prime_hand, i_prime_hand, j_prime_hand);
-		//面到世界坐标系转换矩阵T
-		double T_hand[3][3];
-		T_hand[0][0] = i_prime_hand[0]; T_hand[0][1] = j_prime_hand[0]; T_hand[0][2] = k_prime_hand[0];
-		T_hand[1][0] = i_prime_hand[1]; T_hand[1][1] = j_prime_hand[1]; T_hand[1][2] = k_prime_hand[1];
-		T_hand[2][0] = i_prime_hand[2]; T_hand[2][1] = j_prime_hand[2]; T_hand[2][2] = k_prime_hand[2];
-		double T_T_hand[3][3];
-		invMatrix3x3(T_hand, T_T_hand);
+#if SWING_ARM
+		// 右臂
+		double current_arm_angle_right = robotModel[RIGHT_ARM_FRONT_SWING].q;
+		double current_arm_angle_left = robotModel[LEFT_ARM_FRONT_SWING].q;
+		double arm_abc[3] = {0};
+		double arm_length = 0;
+		arm_abc[0] = robotModel[RIGHT_ARM_FRONT_SWING].p[0] - robotModel[RIGHT_HAND].p[0];
+		arm_abc[1] = robotModel[RIGHT_ARM_FRONT_SWING].p[1] - robotModel[RIGHT_HAND].p[1];
+		arm_abc[2] = robotModel[RIGHT_ARM_FRONT_SWING].p[2] - robotModel[RIGHT_HAND].p[2];
+		arm_length = norm(arm_abc, 1, 3);
+		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft)))/2) / arm_length);
+
+#endif
 
 		for (int i = 0; i < step_basic_frame; i++)
 		{
@@ -2052,25 +2047,12 @@ void trajPlan() {
 			double temp[3];
 			rpy2rot(0, 0, theta, R);
 			MatrixMultiVector3x1(R, robotModel[LEFT_FOOT].b, temp);
-			
-			
-			
-			// 右手 三次多项式时间位移
-			double b_hand = 3 * (2*CP_norm_hand) / (T_cell * T_cell);
-			double c_hand = -2 * (2 * CP_norm_hand) / (T_cell * T_cell * T_cell);
-			x = CP_norm_hand -((pow((i + 1) * frame_T, 2) * b_hand + c_hand * pow((i + 1) * frame_T, 3)));
-			local_p[0] = x;
-			local_p[1] = 0;
-			local_p[2] = 0;
-			MatrixMultiVector3x1(T_hand, local_p, world_p);
-			world_p[0] = C_hand[0] + world_p[0];
-			world_p[1] = C_hand[1] + world_p[1];
-			world_p[2] = C_hand[2] + world_p[2];
-			basic_right_hand[i][0] = world_p[0];
-			basic_right_hand[i][1] = world_p[1];
-			basic_right_hand[i][2] = world_p[2];
-			
+#if SWING_ARM
+			// 右臂
+			robotModel[RIGHT_ARM_FRONT_SWING].q = current_arm_angle_right + i * (-arm_swing_angle - current_arm_angle_right) / step_basic_frame;
+			robotModel[LEFT_ARM_FRONT_SWING].q = current_arm_angle_left + i * (arm_swing_angle - current_arm_angle_left) / step_basic_frame;
 
+#endif
 			// 确定腰部位置，四边形顶点坐标求对角线交点坐标,两手一条直线，两脚一条直线
 			double x1, y1, x2, y2, x3, y3, x4, y4;
 			x1 = robotModel[LEFT_FOOT].p[0]; y1 = robotModel[LEFT_FOOT].p[1];
@@ -2085,20 +2067,15 @@ void trajPlan() {
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[1] = basic_left_foot[i][1] - temp[1];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[2] = basic_left_foot[i][2] - temp[2];
 			inverseKinmatics_leftFoot(0, 0, theta);
-			robotModel[RIGHT_HAND].p[0] = basic_right_hand[i][0];
-			robotModel[RIGHT_HAND].p[1] = basic_right_hand[i][1];
-			robotModel[RIGHT_HAND].p[2] = basic_right_hand[i][2];
-			inverseKinmatics_rightHand();
+
 			rpy2rot(0, 0, theta, R);
 			MatrixMultiVector3x1(R, robotModel[RIGHT_FOOT].b, temp);
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[0] = solid_right_foot[0] - temp[0];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = solid_right_foot[1] - temp[1];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = solid_right_foot[2] - temp[2];
 			inverseKinmatics_rightFoot(0, 0, theta);
-			robotModel[LEFT_HAND].p[0] = solid_left_hand[0];
-			robotModel[LEFT_HAND].p[1] = solid_left_hand[1];
-			robotModel[LEFT_HAND].p[2] = solid_left_hand[2];
-			inverseKinmatics_leftHand();
+
+
 #if WRITETXT
 			writeTxt();
 #endif
@@ -2135,33 +2112,18 @@ void trajPlan() {
 		T[2][0] = i_prime[2]; T[2][1] = j_prime[2]; T[2][2] = k_prime[2];
 		double T_T[3][3];
 		invMatrix3x3(T, T_T);
-
-		// 左手
-		double P_hand[3] = { robotModel[LEFT_HAND].p[0], robotModel[LEFT_HAND].p[1], hand_h };
-		double Q_hand[3] = { (robotModel[LEFT_HAND].p[0] + pn_hand[0]) / 2, (robotModel[LEFT_HAND].p[1] + pn_hand[1]) / 2, hand_h + 0.02 };
-		double R_hand[3] = { pn_hand[0], pn_hand[1], hand_h };
-		double PQ_hand[3] = { Q_hand[0] - P_hand[0], Q_hand[1] - P_hand[1], Q_hand[2] - P_hand[2] };
-		double QR_hand[3] = { R_hand[0] - Q_hand[0], R_hand[1] - Q_hand[1], R_hand[2] - Q_hand[2] };
-		double n1_hand[3];
-		cross3x1(PQ_hand, QR_hand, n1_hand);
-		// 三点平面原点C
-		double C_hand[3] = { Q_hand[0], Q_hand[1], hand_h };
-		// x轴单位向量i_prime
-		double CP_norm_hand = sqrt((C_hand[0] - P_hand[0]) * (C_hand[0] - P_hand[0]) + (C_hand[1] - P_hand[1]) * (C_hand[1] - P_hand[1]) + (C_hand[2] - P_hand[2]) * (C_hand[2] - P_hand[2]));
-		double i_prime_hand[3] = { (P_hand[0] - C_hand[0]) / CP_norm_hand, (P_hand[1] - C_hand[1]) / CP_norm_hand, (P_hand[2] - C_hand[2]) / CP_norm_hand };
-		// z轴单位向量k_prime
-		double n1_morm_hand = sqrt(n1_hand[0] * n1_hand[0] + n1_hand[1] * n1_hand[1] + n1_hand[2] * n1_hand[2]);
-		double k_prime_hand[3] = { n1_hand[0] / n1_morm_hand, n1_hand[1] / n1_morm_hand, n1_hand[2] / n1_morm_hand };
-		// y轴单位向量j_prime
-		double j_prime_hand[3];
-		cross3x1(k_prime_hand, i_prime_hand, j_prime_hand);
-		//面到世界坐标系转换矩阵T
-		double T_hand[3][3];
-		T_hand[0][0] = i_prime_hand[0]; T_hand[0][1] = j_prime_hand[0]; T_hand[0][2] = k_prime_hand[0];
-		T_hand[1][0] = i_prime_hand[1]; T_hand[1][1] = j_prime_hand[1]; T_hand[1][2] = k_prime_hand[1];
-		T_hand[2][0] = i_prime_hand[2]; T_hand[2][1] = j_prime_hand[2]; T_hand[2][2] = k_prime_hand[2];
-		double T_T_hand[3][3];
-		invMatrix3x3(T_hand, T_T_hand);
+#if SWING_ARM
+		// 左臂
+		double current_arm_angle_left = robotModel[LEFT_ARM_FRONT_SWING].q;
+		double current_arm_angle_right = robotModel[RIGHT_ARM_FRONT_SWING].q;
+		double arm_abc[3] = { 0 };
+		double arm_length = 0;
+		arm_abc[0] = robotModel[LEFT_ARM_FRONT_SWING].p[0] - robotModel[LEFT_HAND].p[0];
+		arm_abc[1] = robotModel[LEFT_ARM_FRONT_SWING].p[1] - robotModel[LEFT_HAND].p[1];
+		arm_abc[2] = robotModel[LEFT_ARM_FRONT_SWING].p[2] - robotModel[LEFT_HAND].p[2];
+		arm_length = norm(arm_abc, 1, 3);
+		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+#endif
 
 		for (int i = 0; i < step_basic_frame; i++)
 		{
@@ -2184,22 +2146,13 @@ void trajPlan() {
 			rpy2rot(0, 0, theta, R);
 			MatrixMultiVector3x1(R, robotModel[RIGHT_FOOT].b, temp);
 			
-			
+#if SWING_ARM
+			// 左臂
+			robotModel[LEFT_ARM_FRONT_SWING].q = current_arm_angle_left + i * (-arm_swing_angle - current_arm_angle_left) / step_basic_frame;
+			robotModel[RIGHT_ARM_FRONT_SWING].q = current_arm_angle_right + i * (arm_swing_angle - current_arm_angle_right) / step_basic_frame;
 
-			// 左手 三次多项式时间位移
-			double b_hand = 3 * (2 * CP_norm_hand) / (T_cell * T_cell);
-			double c_hand = -2 * (2 * CP_norm_hand) / (T_cell * T_cell * T_cell);
-			x = CP_norm_hand - ((pow((i + 1) * frame_T, 2) * b_hand + c_hand * pow((i + 1) * frame_T, 3)));
-			local_p[0] = x;
-			local_p[1] = 0;
-			local_p[2] = 0;
-			MatrixMultiVector3x1(T_hand, local_p, world_p);
-			world_p[0] = C_hand[0] + world_p[0];
-			world_p[1] = C_hand[1] + world_p[1];
-			world_p[2] = C_hand[2] + world_p[2];
-			basic_left_hand[i][0] = world_p[0];
-			basic_left_hand[i][1] = world_p[1];
-			basic_left_hand[i][2] = world_p[2];
+#endif
+
 
 			
 			// 确定腰部位置，四边形顶点坐标求对角线交点坐标
@@ -2216,20 +2169,15 @@ void trajPlan() {
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = basic_right_foot[i][1] - temp[1];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = basic_right_foot[i][2] - temp[2];
 			inverseKinmatics_rightFoot(0, 0, theta);
-			robotModel[LEFT_HAND].p[0] = basic_left_hand[i][0];
-			robotModel[LEFT_HAND].p[1] = basic_left_hand[i][1];
-			robotModel[LEFT_HAND].p[2] = basic_left_hand[i][2];
-			inverseKinmatics_leftHand();
+
 			rpy2rot(0, 0, theta, R);
 			MatrixMultiVector3x1(R, robotModel[LEFT_FOOT].b, temp);
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[0] = solid_left_foot[0] - temp[0];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[1] = solid_left_foot[1] - temp[1];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[2] = solid_left_foot[2] - temp[2];
 			inverseKinmatics_leftFoot(0, 0, theta);
-			robotModel[RIGHT_HAND].p[0] = solid_right_hand[0];
-			robotModel[RIGHT_HAND].p[1] = solid_right_hand[1];
-			robotModel[RIGHT_HAND].p[2] = solid_right_hand[2];
-			inverseKinmatics_rightHand();
+
+
 #if WRITETXT
 			writeTxt();
 #endif
@@ -2243,8 +2191,10 @@ void trajPlan() {
 void anglePlan(double delta) {
 	pn[0] = pn[0] + cos(theta + delta) * sx + (-sin(theta + delta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta + delta) * sx + (cos(theta + delta) * sy * (-1) * pow(-1, isLeft));
+#if SWING_ARM
 	pn_hand[0] = pn_hand[0] + cos(theta + delta) * hx + (-sin(theta + delta) * hy * pow(-1, isLeft));
 	pn_hand[1] = pn_hand[1] + sin(theta + delta) * hx + (cos(theta + delta) * hy * pow(-1, isLeft));
+#endif
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2277,33 +2227,19 @@ void anglePlan(double delta) {
 		T[2][0] = i_prime[2]; T[2][1] = j_prime[2]; T[2][2] = k_prime[2];
 		double T_T[3][3];
 		invMatrix3x3(T, T_T);
+#if SWING_ARM
+		// 右臂
+		double current_arm_angle_right = robotModel[RIGHT_ARM_FRONT_SWING].q;
+		double current_arm_angle_left = robotModel[LEFT_ARM_FRONT_SWING].q;
+		double arm_abc[3] = { 0 };
+		double arm_length = 0;
+		arm_abc[0] = robotModel[RIGHT_ARM_FRONT_SWING].p[0] - robotModel[RIGHT_HAND].p[0];
+		arm_abc[1] = robotModel[RIGHT_ARM_FRONT_SWING].p[1] - robotModel[RIGHT_HAND].p[1];
+		arm_abc[2] = robotModel[RIGHT_ARM_FRONT_SWING].p[2] - robotModel[RIGHT_HAND].p[2];
+		arm_length = norm(arm_abc, 1, 3);
+		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
 
-		// 右手
-		double P_hand[3] = { robotModel[RIGHT_HAND].p[0], robotModel[RIGHT_HAND].p[1], hand_h };
-		double Q_hand[3] = { (robotModel[RIGHT_HAND].p[0] + pn_hand[0]) / 2, (robotModel[RIGHT_HAND].p[1] + pn_hand[1]) / 2, hand_h + 0.02 };
-		double R_hand[3] = { pn_hand[0], pn_hand[1], hand_h };
-		double PQ_hand[3] = { Q_hand[0] - P_hand[0], Q_hand[1] - P_hand[1], Q_hand[2] - P_hand[2] };
-		double QR_hand[3] = { R_hand[0] - Q_hand[0], R_hand[1] - Q_hand[1], R_hand[2] - Q_hand[2] };
-		double n1_hand[3];
-		cross3x1(PQ_hand, QR_hand, n1_hand);
-		// 三点平面原点C
-		double C_hand[3] = { Q_hand[0], Q_hand[1], hand_h };
-		// x轴单位向量i_prime
-		double CP_norm_hand = sqrt((C_hand[0] - P_hand[0]) * (C_hand[0] - P_hand[0]) + (C_hand[1] - P_hand[1]) * (C_hand[1] - P_hand[1]) + (C_hand[2] - P_hand[2]) * (C_hand[2] - P_hand[2]));
-		double i_prime_hand[3] = { (P_hand[0] - C_hand[0]) / CP_norm_hand, (P_hand[1] - C_hand[1]) / CP_norm_hand, (P_hand[2] - C_hand[2]) / CP_norm_hand };
-		// z轴单位向量k_prime
-		double n1_morm_hand = sqrt(n1_hand[0] * n1_hand[0] + n1_hand[1] * n1_hand[1] + n1_hand[2] * n1_hand[2]);
-		double k_prime_hand[3] = { n1_hand[0] / n1_morm_hand, n1_hand[1] / n1_morm_hand, n1_hand[2] / n1_morm_hand };
-		// y轴单位向量j_prime
-		double j_prime_hand[3];
-		cross3x1(k_prime_hand, i_prime_hand, j_prime_hand);
-		//面到世界坐标系转换矩阵T
-		double T_hand[3][3];
-		T_hand[0][0] = i_prime_hand[0]; T_hand[0][1] = j_prime_hand[0]; T_hand[0][2] = k_prime_hand[0];
-		T_hand[1][0] = i_prime_hand[1]; T_hand[1][1] = j_prime_hand[1]; T_hand[1][2] = k_prime_hand[1];
-		T_hand[2][0] = i_prime_hand[2]; T_hand[2][1] = j_prime_hand[2]; T_hand[2][2] = k_prime_hand[2];
-		double T_T_hand[3][3];
-		invMatrix3x3(T_hand, T_T_hand);
+#endif
 
 		for (int i = 0; i < step_basic_frame; i++)
 		{
@@ -2329,21 +2265,12 @@ void anglePlan(double delta) {
 			MatrixMultiVector3x1(R, robotModel[LEFT_FOOT].b, temp);
 
 
+#if SWING_ARM
+			// 右臂
+			robotModel[RIGHT_ARM_FRONT_SWING].q = current_arm_angle_right + i * (-arm_swing_angle - current_arm_angle_right) / step_basic_frame;
+			robotModel[LEFT_ARM_FRONT_SWING].q = current_arm_angle_left + i * (arm_swing_angle - current_arm_angle_left) / step_basic_frame;
 
-			// 右手 三次多项式时间位移
-			double b_hand = 3 * (2 * CP_norm_hand) / (T_cell * T_cell);
-			double c_hand = -2 * (2 * CP_norm_hand) / (T_cell * T_cell * T_cell);
-			x = CP_norm_hand - ((pow((i + 1) * frame_T, 2) * b_hand + c_hand * pow((i + 1) * frame_T, 3)));
-			local_p[0] = x;
-			local_p[1] = 0;
-			local_p[2] = 0;
-			MatrixMultiVector3x1(T_hand, local_p, world_p);
-			world_p[0] = C_hand[0] + world_p[0];
-			world_p[1] = C_hand[1] + world_p[1];
-			world_p[2] = C_hand[2] + world_p[2];
-			basic_right_hand[i][0] = world_p[0];
-			basic_right_hand[i][1] = world_p[1];
-			basic_right_hand[i][2] = world_p[2];
+#endif
 
 
 			// 确定腰部位置，四边形顶点坐标求对角线交点坐标,两手一条直线，两脚一条直线
@@ -2360,20 +2287,15 @@ void anglePlan(double delta) {
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[1] = basic_left_foot[i][1] - temp[1];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[2] = basic_left_foot[i][2] - temp[2];
 			inverseKinmatics_leftFoot(0, 0, theta + theta_frame);
-			robotModel[RIGHT_HAND].p[0] = basic_right_hand[i][0];
-			robotModel[RIGHT_HAND].p[1] = basic_right_hand[i][1];
-			robotModel[RIGHT_HAND].p[2] = basic_right_hand[i][2];
-			inverseKinmatics_rightHand();
+
 			rpy2rot(0, 0, theta, R);
 			MatrixMultiVector3x1(R, robotModel[RIGHT_FOOT].b, temp);
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[0] = solid_right_foot[0] - temp[0];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = solid_right_foot[1] - temp[1];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = solid_right_foot[2] - temp[2];
 			inverseKinmatics_rightFoot(0, 0, theta);
-			robotModel[LEFT_HAND].p[0] = solid_left_hand[0];
-			robotModel[LEFT_HAND].p[1] = solid_left_hand[1];
-			robotModel[LEFT_HAND].p[2] = solid_left_hand[2];
-			inverseKinmatics_leftHand();
+
+
 #if WRITETXT
 			writeTxt();
 #endif
@@ -2410,33 +2332,18 @@ void anglePlan(double delta) {
 		T[2][0] = i_prime[2]; T[2][1] = j_prime[2]; T[2][2] = k_prime[2];
 		double T_T[3][3];
 		invMatrix3x3(T, T_T);
-
-		// 左手
-		double P_hand[3] = { robotModel[LEFT_HAND].p[0], robotModel[LEFT_HAND].p[1], hand_h };
-		double Q_hand[3] = { (robotModel[LEFT_HAND].p[0] + pn_hand[0]) / 2, (robotModel[LEFT_HAND].p[1] + pn_hand[1]) / 2, hand_h + 0.02 };
-		double R_hand[3] = { pn_hand[0], pn_hand[1], hand_h };
-		double PQ_hand[3] = { Q_hand[0] - P_hand[0], Q_hand[1] - P_hand[1], Q_hand[2] - P_hand[2] };
-		double QR_hand[3] = { R_hand[0] - Q_hand[0], R_hand[1] - Q_hand[1], R_hand[2] - Q_hand[2] };
-		double n1_hand[3];
-		cross3x1(PQ_hand, QR_hand, n1_hand);
-		// 三点平面原点C
-		double C_hand[3] = { Q_hand[0], Q_hand[1], hand_h };
-		// x轴单位向量i_prime
-		double CP_norm_hand = sqrt((C_hand[0] - P_hand[0]) * (C_hand[0] - P_hand[0]) + (C_hand[1] - P_hand[1]) * (C_hand[1] - P_hand[1]) + (C_hand[2] - P_hand[2]) * (C_hand[2] - P_hand[2]));
-		double i_prime_hand[3] = { (P_hand[0] - C_hand[0]) / CP_norm_hand, (P_hand[1] - C_hand[1]) / CP_norm_hand, (P_hand[2] - C_hand[2]) / CP_norm_hand };
-		// z轴单位向量k_prime
-		double n1_morm_hand = sqrt(n1_hand[0] * n1_hand[0] + n1_hand[1] * n1_hand[1] + n1_hand[2] * n1_hand[2]);
-		double k_prime_hand[3] = { n1_hand[0] / n1_morm_hand, n1_hand[1] / n1_morm_hand, n1_hand[2] / n1_morm_hand };
-		// y轴单位向量j_prime
-		double j_prime_hand[3];
-		cross3x1(k_prime_hand, i_prime_hand, j_prime_hand);
-		//面到世界坐标系转换矩阵T
-		double T_hand[3][3];
-		T_hand[0][0] = i_prime_hand[0]; T_hand[0][1] = j_prime_hand[0]; T_hand[0][2] = k_prime_hand[0];
-		T_hand[1][0] = i_prime_hand[1]; T_hand[1][1] = j_prime_hand[1]; T_hand[1][2] = k_prime_hand[1];
-		T_hand[2][0] = i_prime_hand[2]; T_hand[2][1] = j_prime_hand[2]; T_hand[2][2] = k_prime_hand[2];
-		double T_T_hand[3][3];
-		invMatrix3x3(T_hand, T_T_hand);
+#if SWING_ARM
+		// 左臂
+		double current_arm_angle_left = robotModel[LEFT_ARM_FRONT_SWING].q;
+		double current_arm_angle_right = robotModel[RIGHT_ARM_FRONT_SWING].q;
+		double arm_abc[3] = { 0 };
+		double arm_length = 0;
+		arm_abc[0] = robotModel[LEFT_ARM_FRONT_SWING].p[0] - robotModel[LEFT_HAND].p[0];
+		arm_abc[1] = robotModel[LEFT_ARM_FRONT_SWING].p[1] - robotModel[LEFT_HAND].p[1];
+		arm_abc[2] = robotModel[LEFT_ARM_FRONT_SWING].p[2] - robotModel[LEFT_HAND].p[2];
+		arm_length = norm(arm_abc, 1, 3);
+		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+#endif
 
 		for (int i = 0; i < step_basic_frame; i++)
 		{
@@ -2461,22 +2368,12 @@ void anglePlan(double delta) {
 			MatrixMultiVector3x1(R, robotModel[RIGHT_FOOT].b, temp);
 
 
+#if SWING_ARM
+			// 左臂
+			robotModel[LEFT_ARM_FRONT_SWING].q = current_arm_angle_left + i * (-arm_swing_angle - current_arm_angle_left) / step_basic_frame;
+			robotModel[RIGHT_ARM_FRONT_SWING].q = current_arm_angle_right + i * (arm_swing_angle - current_arm_angle_right) / step_basic_frame;
 
-			// 左手 三次多项式时间位移
-			double b_hand = 3 * (2 * CP_norm_hand) / (T_cell * T_cell);
-			double c_hand = -2 * (2 * CP_norm_hand) / (T_cell * T_cell * T_cell);
-			x = CP_norm_hand - ((pow((i + 1) * frame_T, 2) * b_hand + c_hand * pow((i + 1) * frame_T, 3)));
-			local_p[0] = x;
-			local_p[1] = 0;
-			local_p[2] = 0;
-			MatrixMultiVector3x1(T_hand, local_p, world_p);
-			world_p[0] = C_hand[0] + world_p[0];
-			world_p[1] = C_hand[1] + world_p[1];
-			world_p[2] = C_hand[2] + world_p[2];
-			basic_left_hand[i][0] = world_p[0];
-			basic_left_hand[i][1] = world_p[1];
-			basic_left_hand[i][2] = world_p[2];
-
+#endif
 
 			// 确定腰部位置，四边形顶点坐标求对角线交点坐标
 			double x1, y1, x2, y2, x3, y3, x4, y4;
@@ -2492,20 +2389,15 @@ void anglePlan(double delta) {
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = basic_right_foot[i][1] - temp[1];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = basic_right_foot[i][2] - temp[2];
 			inverseKinmatics_rightFoot(0, 0, theta + theta_frame);
-			robotModel[LEFT_HAND].p[0] = basic_left_hand[i][0];
-			robotModel[LEFT_HAND].p[1] = basic_left_hand[i][1];
-			robotModel[LEFT_HAND].p[2] = basic_left_hand[i][2];
-			inverseKinmatics_leftHand();
+
 			rpy2rot(0, 0, theta, R);
 			MatrixMultiVector3x1(R, robotModel[LEFT_FOOT].b, temp);
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[0] = solid_left_foot[0] - temp[0];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[1] = solid_left_foot[1] - temp[1];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[2] = solid_left_foot[2] - temp[2];
 			inverseKinmatics_leftFoot(0, 0, theta);
-			robotModel[RIGHT_HAND].p[0] = solid_right_hand[0];
-			robotModel[RIGHT_HAND].p[1] = solid_right_hand[1];
-			robotModel[RIGHT_HAND].p[2] = solid_right_hand[2];
-			inverseKinmatics_rightHand();
+
+
 #if WRITETXT
 			writeTxt();
 #endif
@@ -2517,8 +2409,10 @@ void anglePlan(double delta) {
 
 	pn[0] = pn[0] + cos(theta + delta) * sx + (-sin(theta + delta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta + delta) * sx + (cos(theta + delta) * sy * (-1) * pow(-1, isLeft));
+#if SWING_ARM
 	pn_hand[0] = pn_hand[0] + cos(theta + delta) * hx + (-sin(theta + delta) * hy * pow(-1, isLeft));
 	pn_hand[1] = pn_hand[1] + sin(theta + delta) * hx + (cos(theta + delta) * hy * pow(-1, isLeft));
+#endif
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2551,33 +2445,19 @@ void anglePlan(double delta) {
 		T[2][0] = i_prime[2]; T[2][1] = j_prime[2]; T[2][2] = k_prime[2];
 		double T_T[3][3];
 		invMatrix3x3(T, T_T);
+#if SWING_ARM
+		// 右臂
+		double current_arm_angle_right = robotModel[RIGHT_ARM_FRONT_SWING].q;
+		double current_arm_angle_left = robotModel[LEFT_ARM_FRONT_SWING].q;
+		double arm_abc[3] = { 0 };
+		double arm_length = 0;
+		arm_abc[0] = robotModel[RIGHT_ARM_FRONT_SWING].p[0] - robotModel[RIGHT_HAND].p[0];
+		arm_abc[1] = robotModel[RIGHT_ARM_FRONT_SWING].p[1] - robotModel[RIGHT_HAND].p[1];
+		arm_abc[2] = robotModel[RIGHT_ARM_FRONT_SWING].p[2] - robotModel[RIGHT_HAND].p[2];
+		arm_length = norm(arm_abc, 1, 3);
+		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
 
-		// 右手
-		double P_hand[3] = { robotModel[RIGHT_HAND].p[0], robotModel[RIGHT_HAND].p[1], hand_h };
-		double Q_hand[3] = { (robotModel[RIGHT_HAND].p[0] + pn_hand[0]) / 2, (robotModel[RIGHT_HAND].p[1] + pn_hand[1]) / 2, hand_h + 0.02 };
-		double R_hand[3] = { pn_hand[0], pn_hand[1], hand_h };
-		double PQ_hand[3] = { Q_hand[0] - P_hand[0], Q_hand[1] - P_hand[1], Q_hand[2] - P_hand[2] };
-		double QR_hand[3] = { R_hand[0] - Q_hand[0], R_hand[1] - Q_hand[1], R_hand[2] - Q_hand[2] };
-		double n1_hand[3];
-		cross3x1(PQ_hand, QR_hand, n1_hand);
-		// 三点平面原点C
-		double C_hand[3] = { Q_hand[0], Q_hand[1], hand_h };
-		// x轴单位向量i_prime
-		double CP_norm_hand = sqrt((C_hand[0] - P_hand[0]) * (C_hand[0] - P_hand[0]) + (C_hand[1] - P_hand[1]) * (C_hand[1] - P_hand[1]) + (C_hand[2] - P_hand[2]) * (C_hand[2] - P_hand[2]));
-		double i_prime_hand[3] = { (P_hand[0] - C_hand[0]) / CP_norm_hand, (P_hand[1] - C_hand[1]) / CP_norm_hand, (P_hand[2] - C_hand[2]) / CP_norm_hand };
-		// z轴单位向量k_prime
-		double n1_morm_hand = sqrt(n1_hand[0] * n1_hand[0] + n1_hand[1] * n1_hand[1] + n1_hand[2] * n1_hand[2]);
-		double k_prime_hand[3] = { n1_hand[0] / n1_morm_hand, n1_hand[1] / n1_morm_hand, n1_hand[2] / n1_morm_hand };
-		// y轴单位向量j_prime
-		double j_prime_hand[3];
-		cross3x1(k_prime_hand, i_prime_hand, j_prime_hand);
-		//面到世界坐标系转换矩阵T
-		double T_hand[3][3];
-		T_hand[0][0] = i_prime_hand[0]; T_hand[0][1] = j_prime_hand[0]; T_hand[0][2] = k_prime_hand[0];
-		T_hand[1][0] = i_prime_hand[1]; T_hand[1][1] = j_prime_hand[1]; T_hand[1][2] = k_prime_hand[1];
-		T_hand[2][0] = i_prime_hand[2]; T_hand[2][1] = j_prime_hand[2]; T_hand[2][2] = k_prime_hand[2];
-		double T_T_hand[3][3];
-		invMatrix3x3(T_hand, T_T_hand);
+#endif
 
 		for (int i = 0; i < step_basic_frame; i++)
 		{
@@ -2603,21 +2483,12 @@ void anglePlan(double delta) {
 			MatrixMultiVector3x1(R, robotModel[LEFT_FOOT].b, temp);
 
 
+#if SWING_ARM
+			// 右臂
+			robotModel[RIGHT_ARM_FRONT_SWING].q = current_arm_angle_right + i * (-arm_swing_angle - current_arm_angle_right) / step_basic_frame;
+			robotModel[LEFT_ARM_FRONT_SWING].q = current_arm_angle_left + i * (arm_swing_angle - current_arm_angle_left) / step_basic_frame;
 
-			// 右手 三次多项式时间位移
-			double b_hand = 3 * (2 * CP_norm_hand) / (T_cell * T_cell);
-			double c_hand = -2 * (2 * CP_norm_hand) / (T_cell * T_cell * T_cell);
-			x = CP_norm_hand - ((pow((i + 1) * frame_T, 2) * b_hand + c_hand * pow((i + 1) * frame_T, 3)));
-			local_p[0] = x;
-			local_p[1] = 0;
-			local_p[2] = 0;
-			MatrixMultiVector3x1(T_hand, local_p, world_p);
-			world_p[0] = C_hand[0] + world_p[0];
-			world_p[1] = C_hand[1] + world_p[1];
-			world_p[2] = C_hand[2] + world_p[2];
-			basic_right_hand[i][0] = world_p[0];
-			basic_right_hand[i][1] = world_p[1];
-			basic_right_hand[i][2] = world_p[2];
+#endif
 
 
 			// 确定腰部位置，四边形顶点坐标求对角线交点坐标,两手一条直线，两脚一条直线
@@ -2634,20 +2505,14 @@ void anglePlan(double delta) {
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[1] = basic_left_foot[i][1] - temp[1];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[2] = basic_left_foot[i][2] - temp[2];
 			inverseKinmatics_leftFoot(0, 0, theta + theta_frame);
-			robotModel[RIGHT_HAND].p[0] = basic_right_hand[i][0];
-			robotModel[RIGHT_HAND].p[1] = basic_right_hand[i][1];
-			robotModel[RIGHT_HAND].p[2] = basic_right_hand[i][2];
-			inverseKinmatics_rightHand();
+
 			rpy2rot(0, 0, theta + delta, R);
 			MatrixMultiVector3x1(R, robotModel[RIGHT_FOOT].b, temp);
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[0] = solid_right_foot[0] - temp[0];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = solid_right_foot[1] - temp[1];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = solid_right_foot[2] - temp[2];
 			inverseKinmatics_rightFoot(0, 0, theta + delta);
-			robotModel[LEFT_HAND].p[0] = solid_left_hand[0];
-			robotModel[LEFT_HAND].p[1] = solid_left_hand[1];
-			robotModel[LEFT_HAND].p[2] = solid_left_hand[2];
-			inverseKinmatics_leftHand();
+
 
 #if WRITETXT
 			writeTxt();
@@ -2685,33 +2550,18 @@ void anglePlan(double delta) {
 		T[2][0] = i_prime[2]; T[2][1] = j_prime[2]; T[2][2] = k_prime[2];
 		double T_T[3][3];
 		invMatrix3x3(T, T_T);
-
-		// 左手
-		double P_hand[3] = { robotModel[LEFT_HAND].p[0], robotModel[LEFT_HAND].p[1], hand_h };
-		double Q_hand[3] = { (robotModel[LEFT_HAND].p[0] + pn_hand[0]) / 2, (robotModel[LEFT_HAND].p[1] + pn_hand[1]) / 2, hand_h + 0.02 };
-		double R_hand[3] = { pn_hand[0], pn_hand[1], hand_h };
-		double PQ_hand[3] = { Q_hand[0] - P_hand[0], Q_hand[1] - P_hand[1], Q_hand[2] - P_hand[2] };
-		double QR_hand[3] = { R_hand[0] - Q_hand[0], R_hand[1] - Q_hand[1], R_hand[2] - Q_hand[2] };
-		double n1_hand[3];
-		cross3x1(PQ_hand, QR_hand, n1_hand);
-		// 三点平面原点C
-		double C_hand[3] = { Q_hand[0], Q_hand[1], hand_h };
-		// x轴单位向量i_prime
-		double CP_norm_hand = sqrt((C_hand[0] - P_hand[0]) * (C_hand[0] - P_hand[0]) + (C_hand[1] - P_hand[1]) * (C_hand[1] - P_hand[1]) + (C_hand[2] - P_hand[2]) * (C_hand[2] - P_hand[2]));
-		double i_prime_hand[3] = { (P_hand[0] - C_hand[0]) / CP_norm_hand, (P_hand[1] - C_hand[1]) / CP_norm_hand, (P_hand[2] - C_hand[2]) / CP_norm_hand };
-		// z轴单位向量k_prime
-		double n1_morm_hand = sqrt(n1_hand[0] * n1_hand[0] + n1_hand[1] * n1_hand[1] + n1_hand[2] * n1_hand[2]);
-		double k_prime_hand[3] = { n1_hand[0] / n1_morm_hand, n1_hand[1] / n1_morm_hand, n1_hand[2] / n1_morm_hand };
-		// y轴单位向量j_prime
-		double j_prime_hand[3];
-		cross3x1(k_prime_hand, i_prime_hand, j_prime_hand);
-		//面到世界坐标系转换矩阵T
-		double T_hand[3][3];
-		T_hand[0][0] = i_prime_hand[0]; T_hand[0][1] = j_prime_hand[0]; T_hand[0][2] = k_prime_hand[0];
-		T_hand[1][0] = i_prime_hand[1]; T_hand[1][1] = j_prime_hand[1]; T_hand[1][2] = k_prime_hand[1];
-		T_hand[2][0] = i_prime_hand[2]; T_hand[2][1] = j_prime_hand[2]; T_hand[2][2] = k_prime_hand[2];
-		double T_T_hand[3][3];
-		invMatrix3x3(T_hand, T_T_hand);
+#if SWING_ARM
+		// 左臂
+		double current_arm_angle_left = robotModel[LEFT_ARM_FRONT_SWING].q;
+		double current_arm_angle_right = robotModel[RIGHT_ARM_FRONT_SWING].q;
+		double arm_abc[3] = { 0 };
+		double arm_length = 0;
+		arm_abc[0] = robotModel[LEFT_ARM_FRONT_SWING].p[0] - robotModel[LEFT_HAND].p[0];
+		arm_abc[1] = robotModel[LEFT_ARM_FRONT_SWING].p[1] - robotModel[LEFT_HAND].p[1];
+		arm_abc[2] = robotModel[LEFT_ARM_FRONT_SWING].p[2] - robotModel[LEFT_HAND].p[2];
+		arm_length = norm(arm_abc, 1, 3);
+		arm_swing_angle = asin(((cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft))) / 2) / arm_length);
+#endif
 
 		for (int i = 0; i < step_basic_frame; i++)
 		{
@@ -2736,21 +2586,12 @@ void anglePlan(double delta) {
 			MatrixMultiVector3x1(R, robotModel[RIGHT_FOOT].b, temp);
 
 
+#if SWING_ARM
+			// 左臂
+			robotModel[LEFT_ARM_FRONT_SWING].q = current_arm_angle_left + i * (-arm_swing_angle - current_arm_angle_left) / step_basic_frame;
+			robotModel[RIGHT_ARM_FRONT_SWING].q = current_arm_angle_right + i * (arm_swing_angle - current_arm_angle_right) / step_basic_frame;
 
-			// 左手 三次多项式时间位移
-			double b_hand = 3 * (2 * CP_norm_hand) / (T_cell * T_cell);
-			double c_hand = -2 * (2 * CP_norm_hand) / (T_cell * T_cell * T_cell);
-			x = CP_norm_hand - ((pow((i + 1) * frame_T, 2) * b_hand + c_hand * pow((i + 1) * frame_T, 3)));
-			local_p[0] = x;
-			local_p[1] = 0;
-			local_p[2] = 0;
-			MatrixMultiVector3x1(T_hand, local_p, world_p);
-			world_p[0] = C_hand[0] + world_p[0];
-			world_p[1] = C_hand[1] + world_p[1];
-			world_p[2] = C_hand[2] + world_p[2];
-			basic_left_hand[i][0] = world_p[0];
-			basic_left_hand[i][1] = world_p[1];
-			basic_left_hand[i][2] = world_p[2];
+#endif
 
 
 			// 确定腰部位置，四边形顶点坐标求对角线交点坐标
@@ -2767,20 +2608,14 @@ void anglePlan(double delta) {
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = basic_right_foot[i][1] - temp[1];
 			robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = basic_right_foot[i][2] - temp[2];
 			inverseKinmatics_rightFoot(0, 0, theta + theta_frame);
-			robotModel[LEFT_HAND].p[0] = basic_left_hand[i][0];
-			robotModel[LEFT_HAND].p[1] = basic_left_hand[i][1];
-			robotModel[LEFT_HAND].p[2] = basic_left_hand[i][2];
-			inverseKinmatics_leftHand();
+
 			rpy2rot(0, 0, theta + delta, R);
 			MatrixMultiVector3x1(R, robotModel[LEFT_FOOT].b, temp);
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[0] = solid_left_foot[0] - temp[0];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[1] = solid_left_foot[1] - temp[1];
 			robotModel[LEFT_ANKLE_SIDE_SWING].p[2] = solid_left_foot[2] - temp[2];
 			inverseKinmatics_leftFoot(0, 0, theta + delta);
-			robotModel[RIGHT_HAND].p[0] = solid_right_hand[0];
-			robotModel[RIGHT_HAND].p[1] = solid_right_hand[1];
-			robotModel[RIGHT_HAND].p[2] = solid_right_hand[2];
-			inverseKinmatics_rightHand();
+
 #if WRITETXT
 			writeTxt();
 #endif

@@ -2,6 +2,7 @@
 #define ROBOTMODEL
 #define DEBUG 0
 #define WRITETXT 1
+#define SWING_ARM 1
 #define PART_NUMBER 26
 #define NONE_JOINT  255
 #define PI  3.1415926
