@@ -8,8 +8,10 @@ robotLink robotModel[26];   // 机器人整体模型数组
 static double eye[3][3] = { {1,0,0},{0,1,0},{0,0,1} };
 
 const int step_basic_frame = 25;
+// 双脚支撑帧数
+const int ds_frame = 5;
 // 单位为 米，千克，秒, 弧度
-	// 步长 step_x,这里规划先迈左脚摆右手
+// 步长 step_x,这里规划先迈左脚摆右手
 double sx = 0.1;
 double sy = 0.0528 * 2;
 // 肩长
@@ -24,6 +26,7 @@ double fh = 0.05;
 // 帧间隔时间
 double frame_T = 0.02;
 double T_cell = step_basic_frame * frame_T;
+
 // 转弯角
 double theta = 0;
 // 脚步初始位置
@@ -45,6 +48,7 @@ double error_Com_ZmpCom[3] = { 0 };
 double sum_error_Com_ZmpCom = 0;
 
 bool isLeft = true;
+bool isDsPhase = true;
 
 double basic_left_hand[step_basic_frame][3] =
 { 0 };
@@ -74,21 +78,21 @@ double state_space_B[3] = { powf(dt,3) / 6, dt * dt / 2,dt };
 double state_space_C[3] = { 1,0,-zc / gravity };
 double state_space_Com[2][3] = {0};
 double sum_e[2] = { 0 };
-const int N_preview = 2 * step_basic_frame;
+const int N_preview = 2 * step_basic_frame + 2 * ds_frame;
 // 计算结果
 double ks = 509.270683139212;
-double kx[3] = { 9901.19795970318	,2023.99459263373,	56.6120346271035 };
-double zmp_weight_f[2 * step_basic_frame] = {
-	- 667.714646977504, - 786.196342686028, - 817.907469422699, - 781.373266261508, - 709.573090048174,
-	- 628.350099533318, - 551.900303351159, - 485.399832740281, - 429.038650260766, - 381.101682308915,
-	- 339.661194810992, - 303.223257369275, - 270.805393500508, - 241.799723354576, - 215.812183616704,
-	- 192.548493248281, - 171.753755856202, - 153.189375234005, - 136.629074276295, - 121.861533914600,
-	- 108.693379646419, - 96.9504456233559, - 86.4773283501663, - 77.1359073254730, - 68.8034821621016,
-	- 61.3709325913295, - 54.7410800813827, - 48.8272873423575, - 43.5522676666375, - 38.8470602170006,
-	- 34.6501333742970, - 30.9065897292540, - 27.5674559555676, - 24.5890468486326, - 21.9323958939230,
-	- 19.5627460505250, - 17.4490949758736, - 15.5637892411450, - 13.8821624281784, - 12.3822124068436,
-	- 11.0443135396040, - 9.85096000768734, - 8.78653687233856, - 7.83711586203139, - 6.99027321022830,
-	- 6.23492716192785, - 5.56119302619990, - 4.96025388131022, - 4.42424524308183, - 3.94615218909936,
+double kx[3] = { 9901.19795970318,	2023.99459263373,	56.6120346271035 };
+double zmp_weight_f[2 * N_preview] = {
+	- 667.714646977504, - 786.196342686028, - 817.907469422699, - 781.373266261508, - 709.573090048174, - 628.350099533318, 
+	- 551.900303351159, - 485.399832740281, - 429.038650260766, - 381.101682308915, - 339.661194810992, - 303.223257369275, 
+	- 270.805393500508, - 241.799723354576, - 215.812183616704, - 192.548493248281, - 171.753755856202, - 153.189375234005, 
+	- 136.629074276295, - 121.861533914600, - 108.693379646419, - 96.9504456233559, - 86.4773283501663, - 77.1359073254730, 
+	- 68.8034821621016, - 61.3709325913295, - 54.7410800813827, - 48.8272873423575, - 43.5522676666375, - 38.8470602170006, 
+	- 34.6501333742970, - 30.9065897292540, - 27.5674559555676, - 24.5890468486326, - 21.9323958939230, - 19.5627460505250, 
+	- 17.4490949758736, - 15.5637892411450, - 13.8821624281784, - 12.3822124068436, - 11.0443135396040, - 9.85096000768734, 
+	- 8.78653687233856, - 7.83711586203139, - 6.99027321022830, - 6.23492716192785, - 5.56119302619990, - 4.96025388131022, 
+	- 4.42424524308183, - 3.94615218909936, - 3.51971759381751, - 3.13936027470157, - 2.80010197903805, - 2.49750225663259, 
+	- 2.22760036672922, - 1.98686345946763, - 1.77214035424074, - 1.58062031049487, - 1.40979625179083, - 1.25743196216925
 };
 
 void robotModelInit(robotLink* robotModel)
@@ -1979,6 +1983,7 @@ void trajPlan() {
 	// 第n步
 	pn[0] = pn[0] + cos(theta) * sx + (-sin(theta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta) * sx + (cos(theta) * sy * (-1) * pow(-1, isLeft));
+	isDsPhase = false;
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2183,6 +2188,7 @@ void trajPlan() {
 #endif
 		}
 	}
+	dFootSupportPhase(theta,theta,theta);
 	changeFoot();
 
 
@@ -2191,7 +2197,7 @@ void trajPlan() {
 void anglePlan(double delta) {
 	pn[0] = pn[0] + cos(theta + delta) * sx + (-sin(theta + delta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta + delta) * sx + (cos(theta + delta) * sy * (-1) * pow(-1, isLeft));
-
+	isDsPhase = false;
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2400,13 +2406,20 @@ void anglePlan(double delta) {
 #endif
 		}
 	}
+	if (isLeft) {
+		dFootSupportPhase(theta + delta / 2, theta + delta, theta);
+	}
+	else
+	{
+		dFootSupportPhase(theta + delta/2, theta, theta + delta);
+	}
 	changeFoot();
 
 	// 拐弯第二步
 
 	pn[0] = pn[0] + cos(theta + delta) * sx + (-sin(theta + delta) * sy * (-1) * pow(-1, isLeft));
 	pn[1] = pn[1] + sin(theta + delta) * sx + (cos(theta + delta) * sy * (-1) * pow(-1, isLeft));
-
+	isDsPhase = false;
 	if (isLeft) {
 		//确定轨迹的三点用PQR表示
 		// 此时右脚左手位置固定，记录位置
@@ -2615,8 +2628,10 @@ void anglePlan(double delta) {
 #endif
 		}
 	}
-	changeFoot();
 	theta = theta + delta;
+	dFootSupportPhase(theta, theta, theta);
+	changeFoot();
+	
 }
 
 void CalcTrajectory_Com(int current_frame_count) {
@@ -2635,25 +2650,55 @@ void CalcTrajectory_Com(int current_frame_count) {
 	
 	for (int i = 0; i < N_preview; i++)
 	{
-		if (step_basic_frame - current_frame_count >= i) {
-			zmp_preview[0][i] = support_ZMP[0];
-			zmp_preview[1][i] = support_ZMP[1];
-		}
-		else if (i - (step_basic_frame - current_frame_count) <= step_basic_frame) {
-			zmp_preview[0][i] = pn[0];
-			zmp_preview[1][i] = pn[1];
+		if (!isDsPhase) {
+			if (step_basic_frame - current_frame_count >= i) {
+				zmp_preview[0][i] = support_ZMP[0];
+				zmp_preview[1][i] = support_ZMP[1];
+			}
+			else if (i - (step_basic_frame - current_frame_count) <= ds_frame) {
+				zmp_preview[0][i] = support_ZMP[0] + (i - (step_basic_frame - current_frame_count)) * (pn[0] - support_ZMP[0]) / ds_frame;
+				zmp_preview[1][i] = support_ZMP[1] + (i - (step_basic_frame - current_frame_count)) * (pn[1] - support_ZMP[1]) / ds_frame;
+			}
+			else if (i - (step_basic_frame - current_frame_count) - ds_frame <= step_basic_frame) {
+				zmp_preview[0][i] = pn[0];
+				zmp_preview[1][i] = pn[1];
+			}
+			else if (i - (step_basic_frame - current_frame_count) - ds_frame - step_basic_frame <= ds_frame) {
+				zmp_preview[0][i] = pn[0] + (i - (step_basic_frame - current_frame_count) - ds_frame - step_basic_frame) * (temp_pn[0] - pn[0]) / ds_frame;
+				zmp_preview[1][i] = pn[1] + (i - (step_basic_frame - current_frame_count) - ds_frame - step_basic_frame) * (temp_pn[1] - pn[1]) / ds_frame;
+			}
+			else
+			{
+				zmp_preview[0][i] = temp_pn[0];
+				zmp_preview[1][i] = temp_pn[1];
+			}
 		}
 		else
 		{
-			zmp_preview[0][i] = temp_pn[0];
-			zmp_preview[1][i] = temp_pn[1];
+			if (ds_frame - current_frame_count >= i) {
+				zmp_preview[0][i] = support_ZMP[0] + (current_frame_count + i) * (pn[0] - support_ZMP[0]) / ds_frame;
+				zmp_preview[1][i] = support_ZMP[1] + (current_frame_count + i) * (pn[1] - support_ZMP[1]) / ds_frame;
+			}
+			else if (i - (ds_frame - current_frame_count) <= step_basic_frame) {
+				zmp_preview[0][i] = pn[0];
+				zmp_preview[1][i] = pn[1];
+			}
+			else if (i - (ds_frame - current_frame_count)- step_basic_frame  <= ds_frame) {
+				zmp_preview[0][i] = pn[0] + (i - (step_basic_frame - current_frame_count) - step_basic_frame) * (temp_pn[0] - pn[0]) / ds_frame;
+				zmp_preview[1][i] = pn[1] + (i - (step_basic_frame - current_frame_count) - step_basic_frame) * (temp_pn[1] - pn[1]) / ds_frame;
+			}
+			else
+			{
+				zmp_preview[0][i] = temp_pn[0];
+				zmp_preview[1][i] = temp_pn[1];
+			}
 		}
 	}
 	
 	double zmp_x = state_space_C[0] * state_space_Com[0][0] + state_space_C[1] * state_space_Com[0][1] + state_space_C[2] * state_space_Com[0][2];
 	double zmp_y = state_space_C[0] * state_space_Com[1][0] + state_space_C[1] * state_space_Com[1][1] + state_space_C[2] * state_space_Com[1][2];
-	sum_e[0] = sum_e[0] + zmp_x - support_ZMP[0];
-	sum_e[1] = sum_e[1] + zmp_y - support_ZMP[1];
+	sum_e[0] = sum_e[0] + zmp_x - zmp_preview[0][0];
+	sum_e[1] = sum_e[1] + zmp_y - zmp_preview[1][0];
 	double FMultiZmpPre[2] = { 0 };
 	for (int i = 0; i < N_preview; i++)
 	{
@@ -2670,6 +2715,32 @@ void CalcTrajectory_Com(int current_frame_count) {
 	state_space_Com[1][2] = state_space_A[2][0] * state_space_Com[1][0] + state_space_A[2][1] * state_space_Com[1][1] + state_space_A[2][2] * state_space_Com[1][2] + state_space_B[2] * u_y;
 	Com[0] = state_space_Com[0][0];
 	Com[1] = state_space_Com[1][0];
+}
+
+void dFootSupportPhase(double theta_mainbody, double theta_left, double theta_right)
+{
+	isDsPhase = true;
+	double solid_left_foot[3] = { robotModel[LEFT_FOOT].p[0],robotModel[LEFT_FOOT].p[1],robotModel[LEFT_FOOT].p[2] };
+	double solid_right_foot[3] = { robotModel[RIGHT_FOOT].p[0],robotModel[RIGHT_FOOT].p[1],robotModel[RIGHT_FOOT].p[2] };
+	for (int i = 0; i < ds_frame; i++)
+	{
+		waistPosition_com(0, 0, theta_mainbody, i);
+		double R[3][3];
+		double temp[3];
+		rpy2rot(0, 0, theta_right, R);
+		MatrixMultiVector3x1(R, robotModel[RIGHT_FOOT].b, temp);
+		robotModel[RIGHT_ANKLE_SIDE_SWING].p[0] = solid_right_foot[0] - temp[0];
+		robotModel[RIGHT_ANKLE_SIDE_SWING].p[1] = solid_right_foot[1] - temp[1];
+		robotModel[RIGHT_ANKLE_SIDE_SWING].p[2] = solid_right_foot[2] - temp[2];
+		inverseKinmatics_rightFoot(0, 0, theta_right);
+		rpy2rot(0, 0, theta_left, R);
+		MatrixMultiVector3x1(R, robotModel[LEFT_FOOT].b, temp);
+		robotModel[LEFT_ANKLE_SIDE_SWING].p[0] = solid_left_foot[0] - temp[0];
+		robotModel[LEFT_ANKLE_SIDE_SWING].p[1] = solid_left_foot[1] - temp[1];
+		robotModel[LEFT_ANKLE_SIDE_SWING].p[2] = solid_left_foot[2] - temp[2];
+		inverseKinmatics_leftFoot(0, 0, theta_left);
+		writeTxt();
+	}
 }
 
 /*/void test()

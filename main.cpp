@@ -12,7 +12,7 @@ int main(void) {
 	printf("ÖØÐÄ £º%f %f %f", com[0], com[1], com[2]);
 	trajPlan();
 	trajPlan();
-	//anglePlan(PI / 18);
+	anglePlan(PI / 18);
 	trajPlan();
 	trajPlan();
 }

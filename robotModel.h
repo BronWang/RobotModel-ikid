@@ -122,6 +122,7 @@ void writeTxt(); // 只是方便自己输出数据在matlab可视化用
 void trajPlan(); // 已测试
 void anglePlan(double delta); // 已测试
 void CalcTrajectory_Com(int current_frame_count);
+void dFootSupportPhase(double theta_mainbody, double theta_left, double theta_right);
 //void test();
 //void test2();
 //void test3();
