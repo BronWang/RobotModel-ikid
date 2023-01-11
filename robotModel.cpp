@@ -2684,8 +2684,8 @@ void CalcTrajectory_Com(int current_frame_count) {
 				zmp_preview[1][i] = pn[1];
 			}
 			else if (i - (ds_frame - current_frame_count)- step_basic_frame  <= ds_frame) {
-				zmp_preview[0][i] = pn[0] + (i - (step_basic_frame - current_frame_count) - step_basic_frame) * (temp_pn[0] - pn[0]) / ds_frame;
-				zmp_preview[1][i] = pn[1] + (i - (step_basic_frame - current_frame_count) - step_basic_frame) * (temp_pn[1] - pn[1]) / ds_frame;
+				zmp_preview[0][i] = pn[0] + (i - (ds_frame - current_frame_count) - step_basic_frame) * (temp_pn[0] - pn[0]) / ds_frame;
+				zmp_preview[1][i] = pn[1] + (i - (ds_frame - current_frame_count) - step_basic_frame) * (temp_pn[1] - pn[1]) / ds_frame;
 			}
 			else
 			{
